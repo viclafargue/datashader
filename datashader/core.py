@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import dask.dataframe as dd
 from dask.array import Array
+import cudf
 from six import string_types
 from xarray import DataArray, Dataset
 from collections import OrderedDict
@@ -151,7 +152,7 @@ class Canvas(object):
 
         Parameters
         ----------
-        source : pandas.DataFrame, dask.DataFrame, or xarray.DataArray/Dataset
+        source : pandas.DataFrame, dask.DataFrame, xarray.DataArray/Dataset or cudf.DataFrame
             The input datasource.
         x, y : str
             Column names for the x and y coordinates of each point.
@@ -876,7 +877,7 @@ def bypixel(source, canvas, glyph, agg):
 
     Parameters
     ----------
-    source : pandas.DataFrame, dask.DataFrame
+    source : pandas.DataFrame, dask.DataFrame or cudf.DataFrame
         Input datasource
     canvas : Canvas
     glyph : Glyph
@@ -891,6 +892,9 @@ def bypixel(source, canvas, glyph, agg):
         cols_to_keep = _cols_to_keep(columns, glyph, agg)
         source = source.drop([col for col in columns if col not in cols_to_keep])
         source = source.to_dask_dataframe()
+    if isinstance(source, cudf.DataFrame):
+        source = source.to_pandas()
+        source[agg.column] = source[agg.column].astype('category')
 
     if isinstance(source, pd.DataFrame):
         # Avoid datashape.Categorical instantiation bottleneck
@@ -904,7 +908,7 @@ def bypixel(source, canvas, glyph, agg):
     elif isinstance(source, dd.DataFrame):
         dshape = dshape_from_dask(source)
     else:
-        raise ValueError("source must be a pandas or dask DataFrame")
+        raise ValueError("source must be a pandas, dask DataFrame or cudf DataFrame")
     schema = dshape.measure
     glyph.validate(schema)
     agg.validate(schema)
